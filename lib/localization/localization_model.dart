@@ -9,6 +9,9 @@ class LocalizationModel extends Translations {
           "eye": 'Eye',
           "mouth": 'Mouth',
           "two_or_more_faces_were_detected": 'Two or more faces were detected!',
+          "no_face_found": 'No face found',
+          'image_downloaded':'Image Downloaded',
+
         },
 
         /// French or other Languages Strings
@@ -18,6 +21,8 @@ class LocalizationModel extends Translations {
           "eye": '눈',
           "mouth": '입',
           "two_or_more_faces_were_detected": '2개 이상의 얼굴이 감지되었어요! -',
+          "no_face_found": '얼굴을 찾을 수 없습니다.',
+          'image_downloaded':'이미지가 다운로드됨',
         }
       };
 }

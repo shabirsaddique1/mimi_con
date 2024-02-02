@@ -1,6 +1,5 @@
 import 'dart:typed_data';
-import 'package:path_provider/path_provider.dart';
-
+import 'package:fluttertoast/fluttertoast.dart';
 import 'dart:io';
 import 'package:image_picker/image_picker.dart';
 import 'package:get/get.dart';
@@ -9,6 +8,8 @@ import 'package:flutter/material.dart';
 import 'package:screenshot/screenshot.dart';
 import 'draggable_card.dart';
 import 'package:image_gallery_saver/image_gallery_saver.dart';
+import 'face_detection/face_detector.dart';
+import 'package:google_mlkit_commons/google_mlkit_commons.dart';
 
 // -----------------------------------
 // HomePage
@@ -20,12 +21,10 @@ class HomePage extends StatefulWidget {
   State<HomePage> createState() => _HomePageState();
 }
 
-
 // -----------------------------------
 // _HomePageState
 // -----------------------------------
 class _HomePageState extends State<HomePage> {
-
   // -----------------------------------
   // Properties
   // -----------------------------------
@@ -34,22 +33,24 @@ class _HomePageState extends State<HomePage> {
   List<int> eyeList = [];
   List<int> mouthList = [];
   ScreenshotController screenshotController = ScreenshotController();
-  GlobalKey _globalKey = GlobalKey();
   Uint8List? _imageFile;
-
+  bool faceFound = false;
+  final FaceDetector _faceDetector = FaceDetector(
+    options: FaceDetectorOptions(
+      enableContours: true,
+      enableLandmarks: true,
+    ),
+  );
 
   // -----------------------------------
   // initState
   // -----------------------------------
   @override
   void initState() {
+    clearValues();
     addImage(source: ImageSource.camera);
     super.initState();
   }
-
-
-
-
 
   // -----------------------------------
   // initState
@@ -62,11 +63,11 @@ class _HomePageState extends State<HomePage> {
     if (pickImage == null) return;
 
     final pickedImage = File(pickImage.path);
-
+    InputImage inputImage = InputImage.fromFilePath(pickedImage.path);
+    _processImage(inputImage);
     setImagePath = pickedImage.path;
     setState(() {});
   }
-
 
   // -----------------------------------
   // build
@@ -74,9 +75,21 @@ class _HomePageState extends State<HomePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(backgroundColor: Colors.black54, actions: [
-        Icon(Icons.more_vert, color: Colors.white70),
-      ]),
+      appBar: AppBar(
+          backgroundColor: Colors.black54,
+          leading: GestureDetector(
+            onTap: () {
+              addImage(source: ImageSource.camera);
+              clearValues();
+            },
+            child: Icon(
+              Icons.close,
+              color: Colors.white70,
+            ),
+          ),
+          actions: [
+            Icon(Icons.more_vert, color: Colors.white70),
+          ]),
       backgroundColor: Colors.black54,
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -119,13 +132,13 @@ class _HomePageState extends State<HomePage> {
                 for (var i = 0; i < mouthList.length; i++) ...{
                   DraggableResizableWidget(
                     child: AnimatedContainer(
-                      duration: Duration(milliseconds: 300),
+                      duration: const Duration(milliseconds: 300),
                       curve: Curves.fastLinearToSlowEaseIn,
                       height: 20,
                       width: 40,
                       decoration: BoxDecoration(
                         color: Colors.lightGreenAccent.withOpacity(0.8),
-                        borderRadius: BorderRadius.only(
+                        borderRadius: const BorderRadius.only(
                           bottomLeft: Radius.circular(
                               75.0), // Adjust these values as needed
                           bottomRight: Radius.circular(75.0),
@@ -142,85 +155,107 @@ class _HomePageState extends State<HomePage> {
           const SizedBox(
             height: 16,
           ),
-          Row(
-            children: [
-              const SizedBox(
-                width: 10,
-              ),
-              SvgPicture.asset('assets/svgs/ic_back.svg'),
-              const SizedBox(
-                width: 10,
-              ),
-              Text(
-                "take_a_picture_again".tr,
-                style: const TextStyle(color: Colors.white),
-              )
-            ],
+          GestureDetector(
+            onTap: () {
+              addImage(source: ImageSource.camera);
+              clearValues();
+            },
+            child: Row(
+              children: [
+                const SizedBox(
+                  width: 10,
+                ),
+                SvgPicture.asset('assets/svgs/ic_back.svg'),
+                const SizedBox(
+                  width: 10,
+                ),
+                Text(
+                  "take_a_picture_again".tr,
+                  style: const TextStyle(color: Colors.white),
+                )
+              ],
+            ),
           ),
           const SizedBox(
             height: 10,
           ),
-          Row(
-            children: [
-              const SizedBox(
-                width: 10,
-              ),
+          !faceFound
+              ? const SizedBox.shrink()
+              : Row(
+                  children: [
+                    const SizedBox(
+                      width: 10,
+                    ),
 
-              /////////Button for Eyes
-              saveGalleyButton(
-                title: 'eye'.tr,
-                onTap: () {
-                  eyeList.isEmpty
-                      ? eyeList.add(0)
-                      : eyeList.length == 1
-                          ? eyeList.add(1)
-                          : null;
-                  setState(() {});
-                },
-              ),
-              const SizedBox(
-                width: 10,
-              ),
-              /////////Button for Mouth
-              saveGalleyButton(
-                title: 'mouth'.tr,
-                onTap: () {
-                  mouthList.isEmpty ? mouthList.add(1) : null;
-                  setState(() {});
-                },
-              ),
-            ],
-          ),
+                    /////////Button for Eyes
+                    saveGalleyButton(
+                      title: 'eye'.tr,
+                      onTap: () {
+                        eyeList.isEmpty
+                            ? eyeList.add(0)
+                            : eyeList.length == 1
+                                ? eyeList.add(1)
+                                : null;
+                        setState(() {});
+                      },
+                    ),
+                    const SizedBox(
+                      width: 10,
+                    ),
+                    /////////Button for Mouth
+                    saveGalleyButton(
+                      title: 'mouth'.tr,
+                      onTap: () {
+                        mouthList.isEmpty ? mouthList.add(1) : null;
+                        setState(() {});
+                      },
+                    ),
+                  ],
+                ),
           const Spacer(),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8.0),
-            child: saveGalleyButton(
-              width: MediaQuery.of(context).size.width,
-              color: eyeList.isEmpty || mouthList.isEmpty
-                  ? Colors.white24
-                  : Colors.indigo,
-              textColor: Colors.white,
-              title: 'save'.tr,
-              onTap: () {
-                if (eyeList.isNotEmpty || mouthList.isNotEmpty) {
-                  screenshotController.capture().then((Uint8List? image) async {
-                    //Capture Done
-                    setState(() {
-                      _imageFile = image;
-                    });
-                    // print('_imageFile $_imageFile');
+          !faceFound
+              ? const SizedBox.shrink()
+              : Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                  child: saveGalleyButton(
+                    width: MediaQuery.of(context).size.width,
+                    color: eyeList.isEmpty ||
+                            mouthList.isEmpty ||
+                            eyeList.length < 2
+                        ? Colors.white24
+                        : Colors.indigo,
+                    textColor: Colors.white,
+                    title: 'save'.tr,
+                    onTap: () async {
+                      // if (await Permission.storage.isGranted) {
+                      if (eyeList.isNotEmpty &&
+                          mouthList.isNotEmpty &&
+                          eyeList.length == 2) {
+                        _imageFile = await screenshotController.capture();
+                        try {
+                          if (_imageFile != null) {
+                            final result = await ImageGallerySaver.saveImage(
+                                _imageFile!,
+                                quality: 100,
+                                name: _imageFile.hashCode.toString());
+                            final result2 = await ImageGallerySaver.saveFile(
+                                setImagePath,
+                                name: setImagePath.hashCode.toString());
 
-                    String filePath = await saveUint8ListToFile(_imageFile!);
-
-                    await _saveImageToGallery(filePath);
-                    _saveImageToGallery(setImagePath);
-                  }).catchError((onError) {
-                   debugPrint(onError);
-                  });
-                }
-              },
-            ),
-          ),
+                            toast(text: 'image_downloaded'.tr);
+                            debugPrint('result : $result');
+                            debugPrint('result : $result2');
+                          }
+                        } catch (e) {
+                          debugPrint('$e');
+                        }
+                      }
+                      // } else {
+                      //   await Permission.storage.request();
+                      // }
+                    },
+                  ),
+                ),
           const SizedBox(
             height: 10,
           ),
@@ -257,37 +292,50 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-
-
   // -----------------------------------
-  // saveUint8ListToFile
+  //function to detect face
   // -----------------------------------
-  Future<String> saveUint8ListToFile(Uint8List data) async {
-    Directory? directory = await getTemporaryDirectory();
-    if (directory != null) {
-      String filePath = '${directory.path}/image.png';
-      File file = File(filePath);
-      await file.writeAsBytes(data);
-      return filePath;
+  Future<void> _processImage(InputImage? inputImage) async {
+    final faces = await _faceDetector.processImage(inputImage!);
+    if (inputImage.metadata?.size != null &&
+        inputImage.metadata?.rotation != null) {
+    } else {
+      if (faces.isEmpty) {
+        toast(text: 'no_face_found'.tr);
+      } else if (faces.length > 1) {
+        toast(text: 'two_or_more_faces_were_detected'.tr);
+      } else {
+        faceFound = true;
+        setState(() {});
+      }
     }
-    throw Exception('Failed to get temporary directory');
+    if (mounted) {
+      setState(() {});
+    }
   }
 
   // -----------------------------------
-  // _saveImageToGallery
+  //toast widget
   // -----------------------------------
-  Future<void> _saveImageToGallery(String filePath) async {
-   debugPrint('_saveImageToGallery - $filePath');
+  toast({required String text}) {
+    Fluttertoast.showToast(
+        msg: text,
+        toastLength: Toast.LENGTH_SHORT,
+        gravity: ToastGravity.CENTER,
+        timeInSecForIosWeb: 3,
+        backgroundColor: Colors.indigo,
+        textColor: Colors.white,
+        fontSize: 16.0);
+  }
 
-    File imageFile = File(filePath);
-    Uint8List imageData = await imageFile.readAsBytes();
-    final result = await ImageGallerySaver.saveImage(imageData);
-    if (result['isSuccess']) {
-     debugPrint('Image saved successfully');
-    } else {
-     debugPrint('Failed to save the image: ${result['errorMessage']}');
-     debugPrint('Failed to save the image: ${result}');
-    }
-    // Utils.toast(result.toString());
+// -----------------------------------
+//clear function
+// -----------------------------------
+  clearValues() {
+    eyeList = [];
+    mouthList = [];
+    faceFound = false;
+    _imageFile = null;
+    setImagePath = '';
   }
 }
